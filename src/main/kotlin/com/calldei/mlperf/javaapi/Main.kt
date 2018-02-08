@@ -4,17 +4,50 @@ import com.beust.jcommander.JCommander
 import com.beust.jcommander.ParameterException
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.marklogic.client.DatabaseClient
 import com.marklogic.xcc.ContentSourceFactory
+import com.marklogic.xcc.SecurityOptions
+import com.marklogic.xcc.Session
 import java.net.URI
+import javax.xml.crypto.Data
 
-fun runPerf(title: String, chunksz: Int, test: () -> Int) {
+fun <T> T.reset() : Unit {
+    if( this is DatabaseClient )
+        this.release()
+    else
+        if( this is Session ){
+            this.close()
+        }
+    else
+            Unit
+}
 
-    System.err.println("Running ${title}")
-    val start = System.nanoTime()
-    val n: Int = test()
-    val end = System.nanoTime()
-    val elapse = (end - start).toDouble() / 1000_000.0
-    println("${title}\t${n}\t${chunksz}\t${elapse}\t${n.toDouble() / (elapse / 1000.0)}")
+class TestClient<T>( val config: Config , val init : () -> T )  {
+    var resetCount = 0
+    var client : T = init()
+
+    fun resetClient() : Unit {
+        if (config.resetConnection ) {
+            client.reset()
+            System.err.println("Reseting Client Connection")
+            client = init()
+        }
+    }
+
+    fun runPerf(title: String, chunksz: Int, test: () -> Int) {
+        resetClient()
+        System.err.println("Running ${title}")
+        val start = System.nanoTime()
+        var n: Int = 0
+
+        run {
+            n = test()
+         }
+        val end = System.nanoTime()
+        val elapse = (end - start).toDouble() / 1000_000.0
+        println("${title}\t${n}\t${chunksz}\t${elapse}\t${n.toDouble() / (elapse / 1000.0)}")
+
+    }
 }
 
 
@@ -29,12 +62,27 @@ fun main(args: Array<String>) {
         if (config.help) throw ParameterException("")
         runTests(config)
     } catch (e: ParameterException) {
+        System.err.println(e.message)
         jc.usage()
 
     } catch (e: Exception) {
         System.err.println(e)
     }
 
+}
+fun newSession(config: Config ): Session {
+    val xcc = when( config.ssl ) {
+        true -> "xccs"
+        else -> "xcc"
+    }
+    // XCC API
+    val uri = URI("${xcc}://${config.user}:${config.password}@${config.host}:${config.port}")
+    val cs = ContentSourceFactory.newContentSource(uri,
+            if( config.ssl )
+                SecurityOptions(getSSLContext())
+            else null )
+    val session = cs.newSession()
+    return session
 }
 
 
@@ -52,76 +100,71 @@ fun runTests(config: Config) {
 
 
     println("test\tdocs\tchunks\telapsed ms\tdocs/sec")
-    if (true) { // POJO and Document API
-        val client = getClient(config)
-        try {
-            runPerf("writePOJONoop", 1) {
-                writePojoNoopEval(client, pojos)
-            }
+    if (!config.noRunPojo) { // POJO and Document API
+        TestClient<DatabaseClient>(config, { newClient(config) }).run {
+            try {
+                runPerf("writePOJONoop", 1) {
+                    writePojoNoopEval( pojos)
+                }
 
-            runPerf("writePOJO", 1) {
-                writePOJOs(client, pojos)
-            }
-            runPerf("writePOJOAsDataBind", 1) {
-                writePojoAsDatabind(client, pojos)
-            }
+                runPerf("writePOJO", 1) {
+                    writePOJOs( pojos)
+                }
+                runPerf("writePOJOAsDataBind", 1) {
+                    writePojoAsDatabind( pojos)
+                }
 
-            runPerf("writePojoAsDatabindChunked", chunksz) {
-                writePojoAsDatabindChunked(client, pojos, chunksz)
+                runPerf("writePojoAsDatabindChunked", chunksz) {
+                    writePojoAsDatabindChunked( pojos, chunksz)
+                }
+                runPerf("writePojoAsDatabindEval", 1) {
+                    writePojoAsDatabindEval( pojos)
+                }
+                runPerf("writePojoAsEvalString", 1) {
+                    writePojoAsEvalString( pojoMap)
+                }
+                runPerf("writePojoAsDatabindEvalChunked", chunksz) {
+                    writePojoAsDatabindEvalChunked( pojos, chunksz)
+                }
+            } finally {
+                client.reset()
             }
-            runPerf("writePojoAsDatabindEval", 1) {
-                writePojoAsDatabindEval(client, pojos)
-            }
-            runPerf("writePojoAsEvalString", 1) {
-                writePojoAsEvalString(client, pojoMap)
-            }
-            runPerf("writePojoAsDatabindEvalChunked", chunksz) {
-                writePojoAsDatabindEvalChunked(client, pojos, chunksz)
-            }
-
-        } finally {
-            client.release()
         }
     }
+        if (!config.noRunXdbc) {
 
-    if (true) {
+            TestClient<Session>(config, { newSession(config) }).run {
+                try {
+                    runPerf("xccWriteJSONAsNoop", 1) {
+                        xccWriteJSONAsNoop( pojoNodes)
 
-        // XCC API
-        val uri = URI("xcc://${config.user}:${config.password}@${config.host}:${config.port}")
-        val cs = ContentSourceFactory.newContentSource(uri)
-        val session = cs.newSession()
-        try {
-            runPerf("xccWriteJSONAsNoop", 1) {
-                xccWriteJSONAsNoop(session, pojoNodes)
+                    }
+                    runPerf("xccWriteJSON", chunksz) {
+                        xccWriteJSON( pojoNodes)
 
-            }
-            runPerf("xccWriteJSON", chunksz) {
-                xccWriteJSON(session, pojoNodes)
+                    }
+                    runPerf("xccWriteJSONAsString", 1) {
+                        xccWriteJSONAsString( pojoMap)
+                    }
+                    runPerf("xccWriteJSONChunked", chunksz) {
+                        xccWriteJSONChunked( pojoNodes, chunksz)
+                    }
+                    runPerf("xccWriteJSONChunked2", chunksz) {
+                        xccWriteJSONChunked2( pojoNodes, chunksz)
+                    }
+                    runPerf("xccWriteJSONAsStringChunked", chunksz) {
+                        xccWriteJSONAsStringChunked( pojoMap, chunksz)
+                    }
 
+                    runPerf("xccWriteJSONAsEval", 1) {
+                        xccWriteJSONAsEval( pojoNodes)
+                    }
+                    runPerf("xccWriteJSONAsEvalChunked", chunksz) {
+                        xccWriteJSONAsEvalChunked( pojoNodes, chunksz)
+                    }
+                } finally {
+                    client.reset()
+                }
             }
-            runPerf("xccWriteJSONAsString", 1) {
-                xccWriteJSONAsString(session, pojoMap)
-            }
-            runPerf("xccWriteJSONChunked", chunksz) {
-                xccWriteJSONChunked(session, pojoNodes, chunksz)
-            }
-            runPerf("xccWriteJSONChunked2", chunksz) {
-                xccWriteJSONChunked2(session, pojoNodes, chunksz)
-            }
-            runPerf("xccWriteJSONAsStringChunked", chunksz) {
-                xccWriteJSONAsStringChunked(session, pojoMap, chunksz)
-            }
-
-            runPerf("xccWriteJSONAsEval", 1) {
-                xccWriteJSONAsEval(session, pojoNodes)
-            }
-            runPerf("xccWriteJSONAsEvalChunked",chunksz) {
-                xccWriteJSONAsEvalChunked(session, pojoNodes,chunksz)
-            }
-        } finally {
-            session.close()
-        }
-
-
     }
 }

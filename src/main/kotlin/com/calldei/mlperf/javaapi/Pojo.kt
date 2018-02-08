@@ -17,10 +17,9 @@ private fun getURI( tag: String , pojo: POJO) = getURI(tag, pojo.id)
  Common simple use: Write each POJO as a separate request
  */
 
-fun writePOJOs(client: DatabaseClient, pojos : Array<POJO> ) : Int{
+fun TestClient<DatabaseClient>.writePOJOs( pojos : Array<POJO> ) : Int{
 
     val repo = client.newPojoRepository(POJO::class.java, java.lang.String::class.java)
-
     var n=0
     pojos.forEach {
         repo.write(it)
@@ -34,11 +33,12 @@ fun writePOJOs(client: DatabaseClient, pojos : Array<POJO> ) : Int{
  * Use explict Jackson Data binding
  */
 
-fun writePojoAsDatabind(client: DatabaseClient, pojos : Array<POJO>  ) : Int{
+fun TestClient<DatabaseClient>. writePojoAsDatabind(pojos : Array<POJO>  ) : Int{
 
     val repo = client.newJSONDocumentManager()
     var n=0
     pojos.asSequence().forEach {
+
         repo.writeAs(getURI("databind", it),JacksonDatabindHandle<POJO>(it))
         n++
     }
@@ -47,7 +47,7 @@ fun writePojoAsDatabind(client: DatabaseClient, pojos : Array<POJO>  ) : Int{
 /*
  * Use explict Jackson Data binding in batches of chunksz
  */
-fun writePojoAsDatabindChunked(client: DatabaseClient, pojos : Array<POJO>, chunksz: Int) : Int{
+fun TestClient<DatabaseClient>.writePojoAsDatabindChunked(pojos : Array<POJO>, chunksz: Int) : Int{
 
     val repo = client.newJSONDocumentManager()
     var n=0
@@ -70,7 +70,7 @@ fun writePojoAsDatabindChunked(client: DatabaseClient, pojos : Array<POJO>, chun
  * this produces a different form then the Java API
  */
 
-fun writePojoAsEvalString(client: DatabaseClient, pojos : Map<Long,String> ) : Int{
+fun TestClient<DatabaseClient>.writePojoAsEvalString( pojos : Map<Long,String> ) : Int{
 
     var n=0
 
@@ -97,7 +97,7 @@ fun writePojoAsEvalString(client: DatabaseClient, pojos : Map<Long,String> ) : I
 /*
  * Minimal round trip using eval()
  */
-fun writePojoNoopEval(client: DatabaseClient, pojos : Array<POJO> ) : Int {
+fun TestClient<DatabaseClient>.writePojoNoopEval(pojos : Array<POJO> ) : Int {
     var n = 0
     pojos.forEach {
         val repo = client.newServerEval()
@@ -111,7 +111,7 @@ fun writePojoNoopEval(client: DatabaseClient, pojos : Array<POJO> ) : Int {
  * Use the Java API Jackson Databind Handle which encodes the JSON as a json:object
  * Convert to JSON Node in the server and insert
  */
-fun writePojoAsDatabindEval(client: DatabaseClient, pojos : Array<POJO> ) : Int{
+fun TestClient<DatabaseClient>.writePojoAsDatabindEval(pojos : Array<POJO> ) : Int{
 
     var n=0
     pojos.forEach {
@@ -135,11 +135,10 @@ fun writePojoAsDatabindEval(client: DatabaseClient, pojos : Array<POJO> ) : Int{
  * Write batches of JSON Objects by sending an array of json-object's
  * serialized using the JacksonDatabindHandle
  */
-fun writePojoAsDatabindEvalChunked(client: DatabaseClient, pojos : Array<POJO>, chunksz: Int  ) : Int{
+fun TestClient<DatabaseClient>.writePojoAsDatabindEvalChunked(pojos : Array<POJO>, chunksz: Int  ) : Int{
 
     var n=0
     pojos.asSequence().chunked(chunksz ).forEach { list ->
-
         val repo = client.newServerEval()
         repo.addVariable("rooturl","/javaeval/")
         repo.addVariable("content",(JacksonDatabindHandle(list)))
