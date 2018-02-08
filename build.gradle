@@ -26,7 +26,7 @@ repositories {
 
 dependencies {
     compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
-    testCompile group: 'junit', name: 'junit', version: '4.12'
+
     compile "com.marklogic:marklogic-client-api:4.0.3"
     compile group: 'com.marklogic', name: 'marklogic-xcc', version: '9.0.4'
     compile "com.fasterxml.jackson.module:jackson-module-kotlin:2.9.0"
