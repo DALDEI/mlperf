@@ -25,19 +25,14 @@ class Config(
         var chuncksz :Int = 10,
         @Parameter(names=["--innersz"],description = "Per document inner array size")
         var innersz : Int = 10,
-
-
         @Parameter(names=["--ssl","--https"],arity=0)
         var ssl : Boolean = false ,
-
-
         @Parameter(names=["--no-pojo","--no-run-pojo"])
         var noRunPojo : Boolean = false,
         @Parameter(names=["--no-xdbc","--no-run-xdbc"])
         var noRunXdbc : Boolean = false,
-
         @Parameter(names=["--reset-connection"],arity=1)
-        var resetEvery : Int  = 0 ,
+        var resetEvery : Int  = 1 ,
 
 @Parameter(names=["--help"],help=true)
         var help: Boolean = false
