@@ -111,7 +111,13 @@ fun runTests(config: Config) {
   println("test\tdocs\tchunks\telapsed ms\tdocs/sec")
   if (!config.noRunPojo) { // POJO and Document API
     TestClient<DatabaseClient>(config, { newClient(config) }).run {
-      try {
+      try
+      {
+
+        log.info("Warming up Java API...")
+        warmupPOJO(client, config.documents)
+
+
         runPerf("writePOJONoop", 1) {
           writePojoNoopEval(pojos)
         }
@@ -135,6 +141,9 @@ fun runTests(config: Config) {
         runPerf("writePojoAsDatabindEvalChunked", chunksz) {
           writePojoAsDatabindEvalChunked(pojos, chunksz)
         }
+      } catch( e: Exception ){
+        log.severe("Exception running test: " + e.localizedMessage);
+        e.printStackTrace(System.err)
       } finally {
         client.reset()
       }
@@ -144,6 +153,10 @@ fun runTests(config: Config) {
 
     TestClient<Session>(config, { newSession(config) }).run {
       try {
+
+        log.info("Warming up XCC...")
+        warmupXCC( config.documents )
+
         runPerf("xccWriteJSONAsNoop", 1) {
           xccWriteJSONAsNoop(pojoNodes)
 

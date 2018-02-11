@@ -12,6 +12,8 @@ import com.marklogic.xcc.types.ValueType
 /*
  * XCC
  */
+private fun getURI(tag: String) = "/xcc/${tag}/"
+
 private fun getURI(tag: String, id: Long) = "/xcc/${tag}/doc-${id}.json"
 
 private fun getURI(tag: String, pojo: JsonNode) = getURI(tag, pojo["id"].asLong())
@@ -103,6 +105,18 @@ fun TestClient<Session>.xccWriteJSONAsNoop(pojos: Array<JsonNode>): Int {
   }
   return n
 }
+fun TestClient<Session>.warmupXCC(count: Int ): Unit {
+  (1..count).forEach {
+    client.submitRequest(client.newAdhocQuery(
+        "xdmp:document-insert(\"/xcc/\" || xdmp:random() || \".xml\", <random>Some random junk {  xdmp:random() } </random>)"
+    ))
+    client.submitRequest(client.newAdhocQuery(
+        "xdmp:directory-delete(\"/xcc/\")"
+    ))
+  }
+}
+
+
 
 /*
  * Write using an eval() ('AdHoc Query')  one node at a time,
@@ -148,7 +162,7 @@ fun TestClient<Session>.xccWriteJSONAsEvalChunked(pojos: Array<JsonNode>, chunks
         "for \$c in \$content/* " +
         " return xdmp:document-insert( \$rooturl || map:get(\$c,'id') || '.json', xdmp:to-json( \$c ) )"
     )
-    query.setNewStringVariable("rooturl", "/xcc/evalbatch/")
+    query.setNewStringVariable("rooturl", getURI("evalchunk"))
     query.setNewVariable("content", ValueType.ARRAY_NODE, arrayNode)
 
     client.submitRequest(query)

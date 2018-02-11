@@ -2,7 +2,7 @@ package com.calldei.mlperf.javaapi
 
 import com.marklogic.client.DatabaseClient
 import com.marklogic.client.io.JacksonDatabindHandle
-
+private fun getURI(tag: String) = "/java/${tag}/"
 private fun getURI(tag: String, id: Long) = "/java/${tag}/doc-${id}.json"
 private fun getURI(tag: String, pojo: POJO) = getURI(tag, pojo.id)
 
@@ -11,16 +11,23 @@ private fun getURI(tag: String, pojo: POJO) = getURI(tag, pojo.id)
  * JAVA Client API
  */
 
-fun evalNop(client: DatabaseClient, count: Int): Int {
-  var n = 0
+fun warmupPOJO(client: DatabaseClient, count: Int) : Unit
+{
   (1..count).forEach {
 
-    val repo = client.newServerEval()
-    repo.xquery("1")
-    repo.eval().forEach { n++ }
+    var repo=client.newServerEval()
+    repo.xquery(
+    "xdmp:document-insert(\"/java/\" || xdmp:random() || \".xml\", <random>Some random junk {  xdmp:random() } </random>)"
+    )
+    repo.eval()
+
+    repo = client.newServerEval()
+    repo.xquery("xdmp:directory-delete(\"/java/\")")
+    repo.eval()
   }
-  return n
 }
+
+
 
 
 /*
@@ -32,6 +39,7 @@ fun TestClient<DatabaseClient>.writePOJOs(pojos: Array<POJO>): Int {
   val repo = client.newPojoRepository(POJO::class.java, java.lang.String::class.java)
   var n = 0
   pojos.forEach {
+  // NO control over where this goes
     repo.write(it)
     n++
   }
@@ -64,7 +72,7 @@ fun TestClient<DatabaseClient>.writePojoAsDatabindChunked(pojos: Array<POJO>, ch
   pojos.asSequence().chunked(chunksz).forEach { list ->
     val set = repo.newWriteSet()
     list.forEach {
-      set.add(getURI("dbchunk", it), JacksonDatabindHandle<POJO>(it))
+      set.add(getURI("databindchunk", it), JacksonDatabindHandle<POJO>(it))
       n++
     }
     repo.write(set)
@@ -86,7 +94,7 @@ fun TestClient<DatabaseClient>.writePojoAsEvalString(pojos: Map<Long, String>): 
 
   pojos.entries.forEach() { (id, str) ->
     val repo = client.newServerEval()
-    repo.addVariable("url", getURI("eval", id))
+    repo.addVariable("url", getURI("evalstring", id))
     repo.addVariable("content", (str))
     repo.xquery(
         "declare variable  \$url as xs:string external ;"+
@@ -114,6 +122,7 @@ fun TestClient<DatabaseClient>.writePojoNoopEval(pojos: Array<POJO>): Int {
   return n
 
 }
+
 
 /*
  * Use the Java API Jackson Databind Handle which encodes the JSON as a json:object
@@ -148,7 +157,7 @@ fun TestClient<DatabaseClient>.writePojoAsDatabindEvalChunked(pojos: Array<POJO>
   var n = 0
   pojos.asSequence().chunked(chunksz).forEach { list ->
     val repo = client.newServerEval()
-    repo.addVariable("rooturl", "/javaeval/")
+    repo.addVariable("rooturl", getURI("evalbindchunk"))
     repo.addVariable("content", (JacksonDatabindHandle(list)))
     repo.xquery("" +
         "declare variable \$rooturl as xs:string external ;" +
